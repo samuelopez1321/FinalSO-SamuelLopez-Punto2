@@ -54,3 +54,48 @@ async def upload_image(
             status_code=500,
             detail=f"Error subiendo imagen a S3: {str(e)}"
         )
+
+@app.get("/get-image")
+def get_image(username: str, image_name: str):
+    object_key = f"{username}/{image_name}"
+
+    try:
+        response = s3.head_object(
+            Bucket=BUCKET_NAME,
+            Key=object_key
+        )
+
+        presigned_url = s3.generate_presigned_url(
+            "get_object",
+            Params={
+                "Bucket": BUCKET_NAME,
+                "Key": object_key
+            },
+            ExpiresIn=3600
+        )
+
+        metadata = response.get("Metadata", {})
+        last_modified = response.get("LastModified")
+
+        return {
+            "message": "Imagen encontrada correctamente",
+            "username": username,
+            "image_name": image_name,
+            "url": presigned_url,
+            "storage_date_metadata": metadata.get("upload_date", "No disponible"),
+            "last_modified_s3": str(last_modified)
+        }
+
+    except ClientError as e:
+        error_code = e.response["Error"]["Code"]
+
+        if error_code == "404":
+            raise HTTPException(
+                status_code=404,
+                detail="No existe el usuario o la imagen solicitada en el bucket S3."
+            )
+
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error consultando imagen en S3: {str(e)}"
+        )
